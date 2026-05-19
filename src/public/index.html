@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CI/CD Demo — Login</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+      padding: 40px;
+      width: 360px;
+    }
+    h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 8px; }
+    .subtitle { color: #666; font-size: 14px; margin-bottom: 28px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 6px; }
+    input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 18px;
+      transition: border-color 0.2s;
+    }
+    input:focus { outline: none; border-color: #4f46e5; }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #4f46e5;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #4338ca; }
+    button:disabled { background: #a5b4fc; cursor: not-allowed; }
+    #message {
+      margin-top: 16px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+    #message.success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+    #message.error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    #dashboard {
+      display: none;
+      text-align: center;
+    }
+    #dashboard h2 { color: #4f46e5; margin-bottom: 12px; }
+    #dashboard p  { color: #555; margin-bottom: 20px; }
+    #logout-btn { background: #ef4444; }
+    #logout-btn:hover { background: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- Form đăng nhập -->
+    <div id="login-form">
+      <h1>Đăng nhập</h1>
+      <p class="subtitle">CI/CD Demo Project</p>
+      <label for="username">Tên đăng nhập</label>
+      <input id="username" type="text" placeholder="admin" autocomplete="username" />
+      <label for="password">Mật khẩu</label>
+      <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+      <button id="login-btn" onclick="doLogin()">Đăng nhập</button>
+      <div id="message"></div>
+    </div>
+
+    <!-- Dashboard sau khi đăng nhập -->
+    <div id="dashboard">
+      <h2>Chào mừng! 🎉</h2>
+      <p id="welcome-text"></p>
+      <button id="logout-btn" onclick="doLogout()">Đăng xuất</button>
+    </div>
+  </div>
+
+  <script>
+    async function doLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = document.getElementById('login-btn');
+      const msg = document.getElementById('message');
+
+      if (!username || !password) {
+        showMessage('Vui lòng nhập đầy đủ thông tin', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Đang đăng nhập...';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          document.getElementById('login-form').style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+          document.getElementById('welcome-text').textContent =
+            `Xin chào ${data.user.username} (${data.user.role})`;
+        } else {
+          showMessage(data.message, 'error');
+        }
+      } catch {
+        showMessage('Lỗi kết nối server', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Đăng nhập';
+      }
+    }
+
+    async function doLogout() {
+      await fetch('/api/logout', { method: 'POST' });
+      document.getElementById('dashboard').style.display = 'none';
+      document.getElementById('login-form').style.display = 'block';
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+    }
+
+    function showMessage(text, type) {
+      const el = document.getElementById('message');
+      el.textContent = text;
+      el.className = type;
+      el.style.display = 'block';
+    }
+
+    // Cho phép nhấn Enter để đăng nhập
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') doLogin();
+    });
+  </script>
+</body>
+</html>

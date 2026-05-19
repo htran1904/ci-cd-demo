@@ -1,0 +1,136 @@
+# ================================================================
+# CI/CD Pipeline — Login Feature Demo
+# Trigger: mỗi khi push lên main hoặc mở Pull Request
+# ================================================================
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ============================================================
+  # JOB 1: BUILD & TYPE CHECK
+  # Kiểm tra code TypeScript có lỗi không trước khi test
+  # ============================================================
+  build:
+    name: Build & Type Check #danh sách các bước để build code và kiểm tra lỗi type
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "[1/5] Checkout code"
+        uses: actions/checkout@v4
+        # Clone source code từ GitHub repo xuống máy runner
+
+      - name: "[2/5] Setup Node.js 20"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          # Cache node_modules để lần sau chạy nhanh hơn
+
+      - name: "[3/5] Install dependencies"
+        run: npm ci
+        # npm ci = giống npm install nhưng dùng package-lock.json,
+        # đảm bảo version chính xác → reproducible build
+
+      - name: "[4/5] TypeScript type check"
+        run: npx tsc --noEmit
+        # Kiểm tra type errors mà KHÔNG tạo file output
+        # Nếu có lỗi → job fail → không cho merge PR
+
+      - name: "[5/5] Compile TypeScript → JavaScript"
+        run: npm run build
+        # tsc biên dịch src/*.ts → dist/*.js (server chạy từ đây)
+
+      - name: "Upload dist/ as artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: dist/
+          retention-days: 7
+        # Lưu file build để job tiếp theo dùng lại, không cần build lại
+
+  # ============================================================
+  # JOB 2: E2E TESTS với Playwright
+  # Chỉ chạy sau khi build thành công (needs: build)
+  # ============================================================
+  e2e-tests:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: build        # ← Phụ thuộc: job này chỉ chạy khi build pass
+
+    steps:
+      - name: "[1/7] Checkout code"
+        uses: actions/checkout@v4
+
+      - name: "[2/7] Setup Node.js 20"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: "[3/7] Install dependencies"
+        run: npm ci
+
+      - name: "[4/7] Download build artifact"
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: dist/
+        # Dùng lại kết quả build từ job trước, tiết kiệm thời gian
+
+      - name: "[5/7] Install Playwright Browsers"
+        run: npx playwright install --with-deps chromium
+        # Tải Chromium browser cho môi trường Ubuntu headless
+
+      - name: "[6/7] Run Playwright Tests"
+        run: npm test
+        # playwright.config.ts sẽ:
+        #   1. Chạy node dist/server.js
+        #   2. Chờ http://localhost:3000/health
+        #   3. Chạy toàn bộ test trong tests/
+        #   4. Dừng server khi xong
+        env:
+          CI: true    # Bật CI mode: headless, retry 2 lần, strict
+
+      - name: "[7/7] Upload test results & report"
+        uses: actions/upload-artifact@v4
+        if: always()   # Upload dù test pass hay fail
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30
+        # → Vào GitHub Actions tab > Artifacts để xem HTML report
+
+  # ============================================================
+  # JOB 3: SUMMARY — Chạy cuối cùng, tổng kết kết quả
+  # ============================================================
+  summary:
+    name: Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [build, e2e-tests]
+    if: always()   # Luôn chạy để báo cáo trạng thái
+
+    steps:
+      - name: Check pipeline result
+        run: |
+          echo "======================================"
+          echo "  CI/CD PIPELINE SUMMARY"
+          echo "======================================"
+          echo "Build job:  ${{ needs.build.result }}"
+          echo "E2E Tests:  ${{ needs.e2e-tests.result }}"
+          echo "Commit:     ${{ github.sha }}"
+          echo "Branch:     ${{ github.ref_name }}"
+          echo "Triggered:  ${{ github.event_name }}"
+          echo "======================================"
+          if [[ "${{ needs.e2e-tests.result }}" == "success" ]]; then
+            echo "✅ All checks passed! Safe to merge."
+          else
+            echo "❌ Pipeline failed. Do NOT merge!"
+            exit 1
+          fi
