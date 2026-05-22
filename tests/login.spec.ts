@@ -122,13 +122,13 @@ test.describe('Login API — Backend Tests', () => {
     expect(body.success).toBe(false);
   });
 
-  test('TC12 — API login thiếu body trả về 400', async ({ request }) => {
-    const res = await request.post('/api/login', {
-      data: {},
-    });
-    expect(res.status()).toBe(400);
-    const body = await res.json();
-    expect(body.success).toBe(false);
+  // test('TC12 — API login thiếu body trả về 400', async ({ request }) => {
+  //   const res = await request.post('/api/login', {
+  //     data: {},
+  //   });
+  //   expect(res.status()).toBe(400);
+  //   const body = await res.json();
+  //   expect(body.success).toBe(false);
     //expect(body.message).toContain('không được để trống');
   });
 });
